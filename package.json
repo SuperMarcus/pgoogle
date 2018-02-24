@@ -13,7 +13,7 @@
     "readline-sync": "^1.4.9"
   },
   "bin": {
-    "pgoogle": "./index.js"
+    "pgoogle": "./cli.js"
   },
   "scripts": {
     "start": "node index.js"

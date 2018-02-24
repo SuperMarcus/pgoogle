@@ -6,12 +6,6 @@ const chalk = require("chalk");
 const pick = require("pick-random");
 const reader = require("readline-sync");
 
-async function filter(arr, callback) {
-    return (await Promise.all(arr.map(async (item, i) => {
-        return (await callback(item, i)) ? item : undefined
-    }))).filter(i=>i!==undefined)
-}
-
 async function getSearchParams() {
     return {
         search: reader.question(`[?] ${chalk.green("What do you want to search for?")} `),
