@@ -12,6 +12,12 @@
     "pick-random": "^2.0.0",
     "readline-sync": "^1.4.9"
   },
+  "homepage": "https://github.com/SuperMarcus/pgoogle",
+  "repository": "github:SuperMarcus/pgoogle.git",
+  "bugs": {
+    "url": "https://github.com/SuperMarcus/pgoogle/issues",
+    "email": "other.marcus@icloud.com"
+  },
   "bin": {
     "pgoogle": "./cli.js"
   },
