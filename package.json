@@ -9,8 +9,11 @@
     "bluebird": "^3.5.1",
     "chalk": "^2.3.1",
     "google": "^2.1.0",
+    "natural": "^0.5.6",
+    "node-wordnet": "^0.1.12",
     "pick-random": "^2.0.0",
-    "readline-sync": "^1.4.9"
+    "readline-sync": "^1.4.9",
+    "wordnet-db": "^3.1.6"
   },
   "homepage": "https://github.com/SuperMarcus/pgoogle",
   "repository": "github:SuperMarcus/pgoogle.git",
@@ -22,6 +25,7 @@
     "pgoogle": "./cli.js"
   },
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "node --inspect-brk index.js"
   }
 }

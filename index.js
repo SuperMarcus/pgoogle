@@ -3,8 +3,11 @@
 const Promise = require("bluebird");
 const google = Promise.promisify(require("google"));
 const chalk = require("chalk");
-const pick = require("pick-random");
+const natrual = require("natural");
 const reader = require("readline-sync");
+const wnetdb = require("wordnet-db");
+const WNet = require("node-wordnet");
+const pick = require("pick-random");
 
 async function getSearchParams() {
     return {
@@ -13,9 +16,9 @@ async function getSearchParams() {
     };
 }
 
-async function create({ search, len }){
+async function create({search, len}) {
     len = parseInt(len);
-    if(Number.isNaN(len) || len <= 0) {
+    if (Number.isNaN(len) || len <= 0) {
         throw new Error("Paragraph length must a positive whole number. Please provide the number of sentences you want to generate.");
     }
 
@@ -24,9 +27,10 @@ async function create({ search, len }){
     let index = 0;
     let pool = [];
 
-    while(pool.length < len){
-        let links = (await google(search, index)).links;
-        if(Array.isArray(links) && links.length > 0){
+    while (pool.length < len) {
+        console.info(`[*] ${chalk.magenta(`Requesting page ${index + 1}`)}`);
+        let links = (await google(search, index * google.resultsPerPage)).links;
+        if (Array.isArray(links) && links.length > 0) {
             let addingSs = links
                 .map(r => {
                     return r.description.replace(/([.?!])\s*(?=[A-Z])/g, "$1|").split("|").toString().replace(/\s+/g, " ")
@@ -35,7 +39,7 @@ async function create({ search, len }){
                 .filter(s => s.length > 0);
             pool = pool.concat(addingSs.filter(
                 (ele, off) => {
-                    if(/[^\s\w,.']+/g.test(ele)){
+                    if (/[^\s\w,.']+/g.test(ele)) {
                         let present = "\n";
                         present += off === 0 ? "" : chalk.gray(addingSs[off - 1]) + " ";
                         present += chalk.yellow(ele);
@@ -45,12 +49,12 @@ async function create({ search, len }){
 
                         let decision = reader.question(`[?] ${
                             chalk.magenta("Do you want to keep this candidate in this context?")
-                        } ${chalk.grey("[yes|no]")} `);
+                            } ${chalk.grey("[yes|no]")} `);
 
                         if (decision.charAt(0) !== 'y') {
                             console.info(`[*] ${chalk.red(`Ok. That sentence will ${chalk.underline("NOT")} appear in the output.`)}`);
                             return false;
-                        }else{
+                        } else {
                             console.info(`[*] ${chalk.green(`Ok. That sentence ${chalk.underline("WILL")} appear in the output.`)}`);
                         }
                     }
@@ -66,11 +70,61 @@ async function create({ search, len }){
     return pool.slice(0, len);
 }
 
+async function obfuscate(sentences) {
+    console.info(`[*] ${chalk.green("Obfuscating sentences...")}`);
+
+    let wnet = new WNet({
+        dataDir: wnetdb.path
+    });
+    let tokenizer = new natrual.TreebankWordTokenizer();
+    let isWord = /\w+/;
+
+    let _accumunator = 0;
+    let _total = 0;
+    let accumunator = () => {
+        _accumunator += 1;
+        process.stdout.write(`\r[*] ${
+            chalk.blue("Processing...")
+        }${
+            chalk.green(parseInt(String(_accumunator/_total * 1000))/10 + "%")
+        }:\t${_accumunator}/${_total}\r`);
+    };
+
+    let processed = await Promise.all(sentences.map(
+        async (s) => {
+            process.stdout.write(`\r[*] ${chalk.green("Parsing tokens...")}\r`);
+            let tokens = tokenizer.tokenize(s);
+            _total += tokens.length;
+            process.stdout.write(`\r[*] ${chalk.green("Start Processing...")}\r`);
+            return (await Promise.all(
+                tokens.map(t => (new Promise((resolve) => {
+                    //Only obfuscate words
+                    if (isWord.test(t)) {
+                        wnet.lookup(t, res => {
+                            resolve(
+                                " " +
+                                (Array.isArray(res.synonyms) && res.synonyms.length > 0 ? pick(res.synonyms) : t)
+                            );
+                            accumunator();
+                        })
+                    } else {
+                        resolve(t);
+                        accumunator();
+                    }
+                })))
+            )).join("").trim()
+        }
+    ));
+    process.stdout.write("\n");
+    return processed;
+}
+
 getSearchParams()
     .then(create)
+    .then(obfuscate)
     .then(p => {
         console.info(`[*] ${chalk.green("Here is your paragraph:")}`);
         console.info("\n" + chalk.blue(p.join(" ")) + "\n");
     })
-    .catch(e => console.error("Error while processing: "+e.message, e))
+    .catch(e => console.error("Error while processing: " + e.message, e))
     .then(() => (process.exit(0)));
