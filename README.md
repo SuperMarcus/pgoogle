@@ -11,7 +11,7 @@ A command line paragraph generator: u give me some keywords, I write ur essay. G
 **Disclaimer**: This tool is created for research purposes, and is not intended to support
 plagiarism or help anyone with their homework. Please be aware of the purpose of using this tool.
 
-    Copyright (C) 2017 Marcus Zhou
+    Copyright (C) 2018 Marcus Zhou
     
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
