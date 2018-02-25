@@ -1,11 +1,19 @@
 {
   "name": "pgoogle",
-  "version": "1.0.4",
+  "version": "1.0.4-a",
   "description": "Google your keywords, then randomly put together a paragraph from the results",
   "main": "index.js",
   "author": "Marcus Zhou <other.marcus@icloud.com> (https://marcuszhou.com)",
   "license": "GPL-3.0",
-  "keywords": [ "google", "essay", "essay-generator", "paragraph-generator", "generator", "homework", "homework-helper" ],
+  "keywords": [
+    "google",
+    "essay",
+    "essay-generator",
+    "paragraph-generator",
+    "generator",
+    "homework",
+    "homework-helper"
+  ],
   "dependencies": {
     "bluebird": "^3.5.1",
     "chalk": "^2.3.1",
