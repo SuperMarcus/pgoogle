@@ -1,6 +1,6 @@
 {
   "name": "pgoogle",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Google your keywords, then randomly put together a paragraph from the results",
   "main": "index.js",
   "author": "Marcus Zhou <other.marcus@icloud.com> (https://marcuszhou.com)",
