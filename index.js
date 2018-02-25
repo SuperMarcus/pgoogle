@@ -91,12 +91,15 @@ async function obfuscate(sentences) {
     };
     let dc = natrual.JaroWinklerDistance.bind(natrual);
     let pickSyn = (original, results) => {
-        let synonyms = [ original ];
         let res = results.reduce((accu, curr) => {
             let dis = dc(curr.lemma, original);
-            return dis > accu.max ? { current: curr, max: dis } : accu;
-        }, { current: { synonyms }, max: 0 });
-        return pick(res.current.synonyms);
+            if (dis >= accu.max) {
+                accu.max = dis;
+                accu.current = accu.current.concat(curr.synonyms);
+            }
+            return accu;
+        }, { current: [ original ], max: 0 });
+        return pick(res.current);
     };
 
     let processed = await Promise.all(sentences.map(
