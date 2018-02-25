@@ -12,11 +12,15 @@ const pick = require("pick-random");
 async function getSearchParams() {
     return {
         search: reader.question(`[?] ${chalk.green("What do you want to search for?")} `),
-        len: reader.question(`[?] ${chalk.yellow("How many sentences do you need?")} `)
+        len: reader.question(`[?] ${chalk.magenta("How many sentences do you need?")} `),
+        syn: reader.question(`[?] ${chalk.yellow("(Experimental)")} ${
+            chalk.magenta("Automatically replace the words with its synonyms?")
+        } ${chalk.grey("[yes|no]")} `)
     };
 }
 
-async function create({search, len}) {
+async function create(params) {
+    let {search, len} = params;
     len = parseInt(len);
     if (Number.isNaN(len) || len <= 0) {
         throw new Error("Paragraph length must a positive whole number. Please provide the number of sentences you want to generate.");
@@ -51,7 +55,7 @@ async function create({search, len}) {
                             chalk.magenta("Do you want to keep this candidate in this context?")
                             } ${chalk.grey("[yes|no]")} `);
 
-                        if (decision.charAt(0) !== 'y') {
+                        if (decision.charAt(0).toLowerCase() !== 'y') {
                             console.info(`[*] ${chalk.red(`Ok. That sentence will ${chalk.underline("NOT")} appear in the output.`)}`);
                             return false;
                         } else {
@@ -67,10 +71,17 @@ async function create({search, len}) {
         }
     }
 
-    return pool.slice(0, len);
+    let res = pool.slice(0, len);
+    res.params = params;
+    return res;
 }
 
 async function obfuscate(sentences) {
+    if(sentences.params.syn.charAt(0).toLowerCase() !== "y"){
+        console.info(`[*] ${chalk.yellow("Skipping synonyms replacing process.")}`);
+        return sentences;
+    }
+
     console.info(`[*] ${chalk.green("Obfuscating sentences...")}`);
 
     let wnet = new WNet({
@@ -128,6 +139,7 @@ async function obfuscate(sentences) {
         }
     ));
     process.stdout.write("\n");
+    processed.params = sentences.params;
     return processed;
 }
 
