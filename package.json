@@ -5,6 +5,7 @@
   "main": "index.js",
   "author": "Marcus Zhou <other.marcus@icloud.com> (https://marcuszhou.com)",
   "license": "GPL-3.0",
+  "keywords": [ "google", "essay", "essay-generator", "paragraph-generator", "generator", "homework", "homework-helper" ],
   "dependencies": {
     "bluebird": "^3.5.1",
     "chalk": "^2.3.1",
