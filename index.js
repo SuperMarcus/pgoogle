@@ -89,6 +89,15 @@ async function obfuscate(sentences) {
             chalk.green(parseInt(String(_accumunator/_total * 1000))/10 + "%")
         }:\t${_accumunator}/${_total}\r`);
     };
+    let dc = natrual.JaroWinklerDistance.bind(natrual);
+    let pickSyn = (original, results) => {
+        let synonyms = [ original ];
+        let res = results.reduce((accu, curr) => {
+            let dis = dc(curr.lemma, original);
+            return dis > accu.max ? { current: curr, max: dis } : accu;
+        }, { current: { synonyms }, max: 0 });
+        return pick(res.current.synonyms);
+    };
 
     let processed = await Promise.all(sentences.map(
         async (s) => {
@@ -103,7 +112,7 @@ async function obfuscate(sentences) {
                         wnet.lookup(t, res => {
                             resolve(
                                 " " +
-                                (Array.isArray(res.synonyms) && res.synonyms.length > 0 ? pick(res.synonyms) : t)
+                                (Array.isArray(res) ? pickSyn(t, res) : t)
                             );
                             accumunator();
                         })
