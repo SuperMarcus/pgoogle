@@ -23,11 +23,12 @@
 const Promise = require("bluebird");
 const google = Promise.promisify(require("google"));
 const chalk = require("chalk");
-const natrual = require("natural");
+const natural = require("natural");
 const reader = require("readline-sync");
 const wnetdb = require("wordnet-db");
 const WNet = require("node-wordnet");
 const pick = require("pick-random");
+const path = require("path");
 
 async function getSearchParams() {
     return {
@@ -35,7 +36,7 @@ async function getSearchParams() {
         len: reader.question(`[?] ${chalk.magenta("How many sentences do you need?")} `),
         syn: reader.question(`[?] ${chalk.yellow("(Experimental)")} ${
             chalk.magenta("Automatically replace the words with its synonyms?")
-        } ${chalk.grey("[yes|no]")} `)
+            } ${chalk.grey("[yes|no]")} `)
     };
 }
 
@@ -56,9 +57,14 @@ async function create(params) {
         let links = (await google(search, index * google.resultsPerPage)).links;
         if (Array.isArray(links) && links.length > 0) {
             let addingSs = links
-                .map(r => {
-                    return r.description.replace(/([.?!])\s*(?=[A-Z])/g, "$1|").split("|").toString().replace(/\s+/g, " ")
-                })
+                .reduce((accu, r) => (accu.concat(
+                    r.description
+                        .replace(/\s+/g, " ")
+                        .replace(/([.?!])\s*(?=[A-Z])/g, "$1|")
+                        .split("|")
+                        .map(s => s.trim())
+                        .filter(s => s.length > 0)
+                )), [])
                 .reduce((a, b) => a.concat(b), [])
                 .filter(s => s.length > 0);
             pool = pool.concat(addingSs.filter(
@@ -97,67 +103,151 @@ async function create(params) {
 }
 
 async function obfuscate(sentences) {
-    if(sentences.params.syn.charAt(0).toLowerCase() !== "y"){
+    if (sentences.params.syn.charAt(0).toLowerCase() !== "y") {
         console.info(`[*] ${chalk.yellow("Skipping synonyms replacing process.")}`);
         return sentences;
     }
 
     console.info(`[*] ${chalk.green("Obfuscating sentences...")}`);
+    console.info(`[*] ${chalk.magenta("Preparing obfuscator...")}`);
 
+    let dummy = d => d;
     let wnet = new WNet({
         dataDir: wnetdb.path
     });
-    let tokenizer = new natrual.TreebankWordTokenizer();
+    let tzr = (new natural.TreebankWordTokenizer()).tokenize;
     let isWord = /\w+/;
+
+    let ntrBf = path.join(path.dirname(require.resolve("natural")), "brill_pos_tagger");
+    let defaultCat = '?';
+
+    let lex = new natural.Lexicon(ntrBf + "/data/English/lexicon_from_posjs.json", defaultCat);
+    let rules = new natural.RuleSet(ntrBf + "/data/English/tr_from_posjs.txt");
+    let tagger = new natural.BrillPOSTagger(lex, rules);
+    let np = new natural.NounInflector();
+    let pvp = new natural.PresentVerbInflector();
+    let stmr = natural.PorterStemmer;
 
     let _accumunator = 0;
     let _total = 0;
-    let accumunator = () => {
+    let _st = "Preparing...";
+    let _swp = (w) => (
+        //Check conditions
+        isWord.test(w[0])
+    );
+    let accumunator = (w) => {
         _accumunator += 1;
-        process.stdout.write(`\r[*] ${
-            chalk.blue("Processing...")
-        }${
-            chalk.green(parseInt(String(_accumunator/_total * 1000))/10 + "%")
-        }:\t${_accumunator}/${_total}\r`);
+        process.stdout.write(`\r[*] ${ chalk.blue(_st) }${
+            chalk.green(parseInt(String(_accumunator / _total * 1000)) / 10 + "%")
+            }:\t${_accumunator}/${_total}\r`);
+        return w;
     };
-    let dc = natrual.JaroWinklerDistance.bind(natrual);
-    let pickSyn = (original, results) => {
-        let res = results.reduce((accu, curr) => {
-            let dis = dc(curr.lemma, original);
-            if (dis >= accu.max) {
-                accu.max = dis;
-                accu.current = accu.current.concat(curr.synonyms);
-            }
-            return accu;
-        }, { current: [ original ], max: 0 });
-        return pick(res.current);
+    let _stage = (l, s) => {
+        _total = l;
+        _st = s;
+        _accumunator = 0;
+        process.stdout.write(`\n[*] ${chalk.blue(s)}\r`);
+    };
+    let swap = async (o) => {
+        let have = {
+            "NN": dummy,
+            "NNP": w => np.singularize(w),
+            "NNPS": w => np.pluralize(w),
+            "NNS": w => np.pluralize(w),
+
+            "VB": dummy,
+            "VBD": dummy,
+            "VBG": dummy,
+            "VBN": dummy,
+            "VBP": w => pvp.pluralize(w),
+            "VBZ": w => pvp.singularize(w),
+
+            "JJ": dummy,
+            "RB": dummy
+        };
+
+        let fnet = () => new Promise(_r => wnet.lookup(o[0], res => {
+            let syn = new Set();
+            let _fnet = o[1].charAt(0) === 'J' ? 'a' : o[1].charAt(0).toLowerCase();
+            syn.add(o[0]);
+            res.filter(r => r.pos === _fnet)
+                .forEach(r =>
+                    r.synonyms
+                        .filter(s => !s.includes("_"))
+                        .forEach(s => syn.add(s)
+                        )
+                );
+            _r(syn);
+        }));
+
+        if (!!have[o[1]]) {
+            if(o[0].charAt(0) === o[0].charAt(0).toLowerCase())
+                return " " + o[0];
+            let selection = pick(Array.from(await fnet()))[0];
+            return " " + have[o[1]](stmr.stem(selection));
+        } else return " " + o[0];
     };
 
-    let processed = await Promise.all(sentences.map(
-        async (s) => {
-            process.stdout.write(`\r[*] ${chalk.green("Parsing tokens...")}\r`);
-            let tokens = tokenizer.tokenize(s);
-            _total += tokens.length;
-            process.stdout.write(`\r[*] ${chalk.green("Start Processing...")}\r`);
-            return (await Promise.all(
-                tokens.map(t => (new Promise((resolve) => {
-                    //Only obfuscate words
-                    if (isWord.test(t)) {
-                        wnet.lookup(t, res => {
-                            resolve(
-                                " " +
-                                (Array.isArray(res) ? pickSyn(t, res) : t)
-                            );
-                            accumunator();
-                        })
-                    } else {
-                        resolve(t);
-                        accumunator();
-                    }
-                })))
-            )).join("").trim()
-        }
-    ));
+    // let dc = natural.JaroWinklerDistance.bind(natural);
+    // let pickSyn = (original, results) => {
+    //     let res = results.reduce((accu, curr) => {
+    //         let dis = dc(curr.lemma, original);
+    //         if (dis >= accu.max) {
+    //             accu.max = dis;
+    //             accu.current = accu.current.concat(curr.synonyms);
+    //         }
+    //         return accu;
+    //     }, { current: [ original ], max: 0 });
+    //     return pick(res.current);
+    // };
+
+    _stage(sentences.length, "Preparing...");
+
+    let tagged = await Promise.all(sentences.map(async s => accumunator(
+        tagger
+            .tag(tzr(s))
+            .map((w, i) => {
+                w.push(i);
+                return w;
+            })
+    )));
+
+    _stage(tagged.reduce((a, c) => a + c.length, 0), "Processing...");
+
+    let processed = (await Promise.all(
+        tagged.map(s => Promise.all(s.map(async w => accumunator(
+            _swp(w) ? swap(w) : w[0])
+        )))
+    )).map(s => {
+        s = s.join("").trim();
+        return s.charAt(0).toUpperCase() + s.substr(1);
+    });
+
+    // let processed = await Promise.all(sentences.map(
+    //     async (s) => {
+    //         process.stdout.write(`\r[*] ${chalk.green("Parsing tokens...")}\r`);
+    //         let tokens = tokenizer.tokenize(s);
+    //         _total += tokens.length;
+    //         process.stdout.write(`\r[*] ${chalk.green("Start Processing...")}\r`);
+    //         return (await Promise.all(
+    //             tokens.map(t => (new Promise((resolve) => {
+    //                 //Only obfuscate words
+    //                 if (isWord.test(t)) {
+    //                     wnet.lookup(t, res => {
+    //                         resolve(
+    //                             " " +
+    //                             (Array.isArray(res) ? pickSyn(t, res) : t)
+    //                         );
+    //                         accumunator();
+    //                     })
+    //                 } else {
+    //                     resolve(t);
+    //                     accumunator();
+    //                 }
+    //             })))
+    //         )).join("").trim()
+    //     }
+    // ));
     process.stdout.write("\n");
     processed.params = sentences.params;
     return processed;
