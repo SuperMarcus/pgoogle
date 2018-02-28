@@ -32,7 +32,8 @@ const eol = require("os").EOL;
 
 const io = {
     in: process.stdin,
-    out: process.stdout
+    out: process.stderr,
+    store: process.stdout
 };
 const rl = Readline.createInterface({
     input: io.in,
@@ -102,8 +103,10 @@ getSearchParams()
     .then(create)
     .then(obfuscate)
     .then(p => {
-        io.out.write(`[*] ${ chalk.green("Here is your paragraph:") }${eol+eol}`);
-        io.out.write(`${ p.paragraph.join(" ") }${eol+eol}`);
+        io.out.write(`[*] ${ chalk.green("Generating Paragraph...") }${eol}`);
+        io.store.write(`Title: ${ p.params.search + eol }`);
+        io.store.write(`${eol}${ p.paragraph.join(" ") }${eol}`);
+        io.out.write(`[*] ${ chalk.green("Done!") }${eol}`)
     })
     .catch(e => console.error("Error while processing: " + e.message, e))
     .then(() => (rl.close()))

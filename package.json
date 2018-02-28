@@ -21,7 +21,6 @@
     "natural": "^0.5.6",
     "node-wordnet": "^0.1.12",
     "pick-random": "^2.0.0",
-    "readline-sync": "^1.4.9",
     "wordnet-db": "^3.1.6"
   },
   "homepage": "https://github.com/SuperMarcus/pgoogle",
