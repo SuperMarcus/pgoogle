@@ -31,9 +31,7 @@ plagiarism or help anyone with their homework. Please be aware of the purpose of
     pick a synonym from its database and automatically replace it.
 * From version 1.0.4, you will be given the option to disable **ASP**.
 
-## Install
-
-Install using npm:
+## Installation
 
 ```bash
 # With NPM

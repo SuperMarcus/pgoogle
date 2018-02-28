@@ -34,7 +34,7 @@
     "pgoogle": "./cli.js"
   },
   "scripts": {
-    "start": "node index.js",
-    "dev": "node --inspect-brk index.js"
+    "start": "node cli.js",
+    "dev": "node --inspect-brk cli.js"
   }
 }

@@ -22,43 +22,26 @@
 
 const Promise = require("bluebird");
 const google = Promise.promisify(require("google"));
-const chalk = require("chalk");
 const natural = require("natural");
-const reader = require("readline-sync");
 const wnetdb = require("wordnet-db");
 const WNet = require("node-wordnet");
 const pick = require("pick-random");
 const path = require("path");
 
-async function getSearchParams() {
-    return {
-        search: reader.question(`[?] ${chalk.green("What do you want to search for?")} `),
-        len: reader.question(`[?] ${chalk.magenta("How many sentences do you need?")} `),
-        syn: reader.question(`[?] ${chalk.yellow("(Experimental)")} ${
-            chalk.magenta("Automatically replace the words with its synonyms?")
-            } ${chalk.grey("[yes|no]")} `)
-    };
-}
-
 async function create(params) {
-    let {search, len} = params;
-    len = parseInt(len);
-    if (Number.isNaN(len) || len <= 0) {
-        throw new Error("Paragraph length must a positive whole number. Please provide the number of sentences you want to generate.");
-    }
-
-    console.info(`[*] ${chalk.yellow("You might be prompt if the search result contains non-standard characters.")}`);
+    let { search, len, notice, status, highlight, ask } = params;
+    await notice("You might be prompt if the search result contains non-standard characters.");
 
     let index = 0;
     let pool = [];
 
     while (pool.length < len) {
-        console.info(`[*] ${chalk.magenta(`Requesting page ${index + 1}`)}`);
+        await status(`Requesting page ${ index + 1 }`);
         let links = (await google(search, index * google.resultsPerPage)).links;
         if (Array.isArray(links) && links.length > 0) {
             let addingSs = links
                 .reduce((accu, r) => (accu.concat(
-                    r.description
+                    r['description']
                         .replace(/\s+/g, " ")
                         .replace(/([.?!])\s*(?=[A-Z])/g, "$1|")
                         .split("|")
@@ -67,49 +50,46 @@ async function create(params) {
                 )), [])
                 .reduce((a, b) => a.concat(b), [])
                 .filter(s => s.length > 0);
-            pool = pool.concat(addingSs.filter(
-                (ele, off) => {
-                    if (/[^\s\w,.']+/g.test(ele)) {
-                        let present = "\n";
-                        present += off === 0 ? "" : chalk.gray(addingSs[off - 1]) + " ";
-                        present += chalk.yellow(ele);
-                        present += off === (addingSs.length - 1) ? "" : " " + chalk.gray(addingSs[off + 1]);
-                        present += "\n";
-                        console.info(present);
 
-                        let decision = reader.question(`[?] ${
-                            chalk.magenta("Do you want to keep this candidate in this context?")
-                            } ${chalk.grey("[yes|no]")} `);
-
-                        if (decision.charAt(0).toLowerCase() !== 'y') {
-                            console.info(`[*] ${chalk.red(`Ok. That sentence will ${chalk.underline("NOT")} appear in the output.`)}`);
-                            return false;
-                        } else {
-                            console.info(`[*] ${chalk.green(`Ok. That sentence ${chalk.underline("WILL")} appear in the output.`)}`);
-                        }
+            for(let off = 0; off < addingSs.length; ++off){
+                let ele = addingSs[off];
+                if ((/[^\s\w\d,.;:?'"\-()/]+/g.test(ele))) {
+                    await highlight(
+                        addingSs.slice(
+                            Math.max(0, off - 1),
+                            Math.min(addingSs.length, off + 2)
+                        ),
+                        [ Math.min(off, 1) ]
+                    );
+                    if (!await ask("Do you want to keep this candidate in this context?", 'boolean') ){
+                        await notice("Ok. That candidate will be discarded.");
+                        continue;
                     }
-                    return true;
+                    await notice("Ok. That candidate will remain in the selection pool.");
                 }
-            ));
+                pool.push(ele)
+            }
+
             index += 1;
         } else {
             len = pool.length;
         }
     }
 
-    let res = pool.slice(0, len);
-    res.params = params;
-    return res;
+    let paragraph = pool.slice(0, len);
+    return { paragraph, params };
 }
 
-async function obfuscate(sentences) {
-    if (sentences.params.syn.charAt(0).toLowerCase() !== "y") {
-        console.info(`[*] ${chalk.yellow("Skipping synonyms replacing process.")}`);
-        return sentences;
+async function obfuscate(previous) {
+    const { notice, status, stageHandler, useObfuscation } = previous.params;
+
+    if (!useObfuscation) {
+        notice("Skipping synonyms replacing process.");
+        return ;
     }
 
-    console.info(`[*] ${chalk.green("Obfuscating sentences...")}`);
-    console.info(`[*] ${chalk.magenta("Preparing obfuscator...")}`);
+    await notice("Obfuscating sentences...");
+    await status("Preparing obfuscator...");
 
     let dummy = d => d;
     let wnet = new WNet({
@@ -130,23 +110,21 @@ async function obfuscate(sentences) {
 
     let _accumunator = 0;
     let _total = 0;
-    let _st = "Preparing...";
-    let _swp = (w) => (
-        //Check conditions
-        isWord.test(w[0])
-    );
+    let _st = "";
+    let _swp = (w) => ( isWord.test(w[0]) );
     let accumunator = (w) => {
         _accumunator += 1;
-        process.stdout.write(`\r[*] ${ chalk.blue(_st) }${
-            chalk.green(parseInt(String(_accumunator / _total * 1000)) / 10 + "%")
-            }:\t${_accumunator}/${_total}\r`);
+        stageHandler.onProgress(_accumunator, _total);
         return w;
     };
     let _stage = (l, s) => {
         _total = l;
         _st = s;
         _accumunator = 0;
-        process.stdout.write(`\n[*] ${chalk.blue(s)}\r`);
+        stageHandler.onStart(s);
+    };
+    let _end = async () => {
+        await stageHandler.onEnd(_accumunator);
     };
     let swap = async (o) => {
         let have = {
@@ -188,22 +166,9 @@ async function obfuscate(sentences) {
         } else return " " + o[0];
     };
 
-    // let dc = natural.JaroWinklerDistance.bind(natural);
-    // let pickSyn = (original, results) => {
-    //     let res = results.reduce((accu, curr) => {
-    //         let dis = dc(curr.lemma, original);
-    //         if (dis >= accu.max) {
-    //             accu.max = dis;
-    //             accu.current = accu.current.concat(curr.synonyms);
-    //         }
-    //         return accu;
-    //     }, { current: [ original ], max: 0 });
-    //     return pick(res.current);
-    // };
+    _stage(previous.paragraph.length, "Preparing");
 
-    _stage(sentences.length, "Preparing...");
-
-    let tagged = await Promise.all(sentences.map(async s => accumunator(
+    let tagged = await Promise.all(previous.paragraph.map(async s => accumunator(
         tagger
             .tag(tzr(s))
             .map((w, i) => {
@@ -212,9 +177,10 @@ async function obfuscate(sentences) {
             })
     )));
 
-    _stage(tagged.reduce((a, c) => a + c.length, 0), "Processing...");
+    await _end();
+    _stage(tagged.reduce((a, c) => a + c.length, 0), "Processing");
 
-    let processed = (await Promise.all(
+    let paragraph = (await Promise.all(
         tagged.map(s => Promise.all(s.map(async w => accumunator(
             _swp(w) ? swap(w) : w[0])
         )))
@@ -223,42 +189,15 @@ async function obfuscate(sentences) {
         return s.charAt(0).toUpperCase() + s.substr(1);
     });
 
-    // let processed = await Promise.all(sentences.map(
-    //     async (s) => {
-    //         process.stdout.write(`\r[*] ${chalk.green("Parsing tokens...")}\r`);
-    //         let tokens = tokenizer.tokenize(s);
-    //         _total += tokens.length;
-    //         process.stdout.write(`\r[*] ${chalk.green("Start Processing...")}\r`);
-    //         return (await Promise.all(
-    //             tokens.map(t => (new Promise((resolve) => {
-    //                 //Only obfuscate words
-    //                 if (isWord.test(t)) {
-    //                     wnet.lookup(t, res => {
-    //                         resolve(
-    //                             " " +
-    //                             (Array.isArray(res) ? pickSyn(t, res) : t)
-    //                         );
-    //                         accumunator();
-    //                     })
-    //                 } else {
-    //                     resolve(t);
-    //                     accumunator();
-    //                 }
-    //             })))
-    //         )).join("").trim()
-    //     }
-    // ));
-    process.stdout.write("\n");
-    processed.params = sentences.params;
-    return processed;
+    await _end();
+
+    return { paragraph, params: previous.params };
 }
 
-getSearchParams()
-    .then(create)
-    .then(obfuscate)
-    .then(p => {
-        console.info(`[*] ${chalk.green("Here is your paragraph:")}`);
-        console.info("\n" + chalk.blue(p.join(" ")) + "\n");
-    })
-    .catch(e => console.error("Error while processing: " + e.message, e))
-    .then(() => (process.exit(0)));
+module.exports = {
+    create,
+    obfuscate,
+
+    //Compatible with ECMA modules
+    default: create
+};
