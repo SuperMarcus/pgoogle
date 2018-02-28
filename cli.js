@@ -28,7 +28,20 @@ const {
     create,
     obfuscate
 } = require("pgoogle");
+const {
+    version
+} = require("pgoogle/package.json");
 const eol = require("os").EOL;
+const cli = require("commander");
+const fs = require("fs");
+
+cli.version(version)
+    .option('-o, --output [path]', "output for the generated document. Pass '-' for stdout.")
+    .option('-a, --answer', "answer all questions with yes")
+    .option('-f, --false', "specify with --answer, answer all the questions with no")
+    .option('-s, --syn', "substitute words with synonyms")
+    .option('-n, --num [number]', "number of sentences to include in the output")
+    .parse(process.argv);
 
 const io = {
     in: process.stdin,
@@ -40,6 +53,18 @@ const rl = Readline.createInterface({
     output: io.out
 });
 
+if (cli.output && cli.output !== '-'){
+    io.store = fs.createWriteStream(cli.output);
+}
+
+const ioCleanup = () => {
+    if (cli.output && cli.output !== '-')
+        io.store.close();
+    rl.close();
+};
+
+const ioWriteStore = (data) => (new Promise(res => io.store.write(data, 'utf8', res)));
+
 //Two step process!!
 const ask = async (question, type, colorizer) => {
     let typeHinter = (
@@ -47,6 +72,7 @@ const ask = async (question, type, colorizer) => {
         type === 'number' ? " [number]" :
         ""
     );
+    if(cli.answer){ return !cli.false }
     return await new Promise(res => {
         let formateed = `[?] ${ (colorizer || chalk.magenta)(question) }${ chalk.grey(typeHinter) } `;
         let resultChecker;
@@ -93,21 +119,23 @@ let stageHandler = {
 };
 
 const getSearchParams = async (param) => (Object.assign({}, param, {
-    search: await ask("What do you want to search for?", 'string', chalk.green),
-    len: await ask("How many sentences do you need?", 'number'),
-    useObfuscation: await ask(`${ chalk.yellow("(Experimental)") } Automatically replace the words with its synonyms?`, 'boolean'),
+    search: cli.args.length > 0 ? cli.args.join(" ") :
+        await ask("What do you want to search for?", 'string', chalk.green),
+    len: cli.num || await ask("How many sentences do you need?", 'number'),
+    useObfuscation: cli.syn ||
+        await ask(`${ chalk.yellow("(Experimental)") } Automatically replace the words with its synonyms?`, 'boolean'),
     io, ask, notice, highlight, status, stageHandler
 }));
 
-getSearchParams()
+getSearchParams({})
     .then(create)
     .then(obfuscate)
-    .then(p => {
+    .then(async p => {
         io.out.write(`[*] ${ chalk.green("Generating Paragraph...") }${eol}`);
-        io.store.write(`Title: ${ p.params.search + eol }`);
-        io.store.write(`${eol}${ p.paragraph.join(" ") }${eol}`);
+        await ioWriteStore(`Title: ${ p.params.search + eol }`);
+        await ioWriteStore(`${eol}${ p.paragraph.join(" ") }${eol+eol}`);
         io.out.write(`[*] ${ chalk.green("Done!") }${eol}`)
     })
     .catch(e => console.error("Error while processing: " + e.message, e))
-    .then(() => (rl.close()))
+    .then(ioCleanup)
     .then(() => (process.exit(0)));

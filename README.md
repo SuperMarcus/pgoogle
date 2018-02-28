@@ -43,10 +43,51 @@ yarn global add pgoogle
 
 ## Usage
 
-Run `pgoogle`, then follow the prompts.
+Run `pgoogle`, then follow the prompts. You can run it without any parameters.
+The wizard will guide you through the generation process.
 
 ```bash
 pgoogle
+```
+
+### Parameters
+
+```
+
+  Usage: pgoogle [options] [search]
+
+  Options:
+
+    -V, --version        output the version number
+    -o, --output [path]  output for the generated document. Pass '-' for stdout.
+    -a, --answer         answer all questions with yes
+    -f, --false          specify with --answer, answer all the questions with no
+    -s, --syn            substitute words with synonyms
+    -n, --num [number]   number of sentences to include in the output
+    -h, --help           output usage information
+
+```
+
+### Examples for using Parameters
+
+```bash
+# The following command tells pgoogle to store the generated paragraph to 'my_paragraph.txt'
+pgoogle -o my_paragraph.txt
+
+# This also stores the generated paragraph to 'my_paragraph.txt'
+pgoogle > my_paragraph.txt
+
+# Tell pgoogle to search "My Research Topic" and store the generated paragraph in 'my_paragraph.txt'
+pgoogle -o my_paragraph.txt "My Research Topic"
+
+# Tell pgoogle to do the search, generate 15 sentences, and store it in 'my_paragraph.txt'
+pgoogle -o my_paragraph.txt -n 15 "Another one of my research topics"
+
+# Tell pgoogle to do the search without asking any questions (default answer YES)
+pgoogle -n 15 -a "Another one of my research topics"
+
+# Tell pgoogle to do the search without asking any questions (automatically answer NO if '-f' is specified)
+pgoogle -n 15 -a -f "Another one of my research topics"
 ```
 
 ### Automatic Synonym Replacing (Experimental)
