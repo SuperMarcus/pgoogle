@@ -85,7 +85,7 @@ async function obfuscate(previous) {
 
     if (!useObfuscation) {
         notice("Skipping synonyms replacing process.");
-        return ;
+        return previous;
     }
 
     await notice("Obfuscating sentences...");
